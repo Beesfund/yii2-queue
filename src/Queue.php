@@ -123,6 +123,12 @@ abstract class Queue extends \yii\base\Component
     public $waitSecondsIfNoQueue = 0;
 
     /**
+     * Set number of fails after which, task will be removed from queue.
+     * @var integer
+     */
+    public $failsLimit = 100;
+
+    /**
      * Initializes the module.
      * @return void
      */

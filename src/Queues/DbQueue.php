@@ -9,6 +9,7 @@
 namespace UrbanIndo\Yii2\Queue\Queues;
 
 use UrbanIndo\Yii2\Queue\Job;
+use yii\db\Expression;
 
 /**
  * DbQueue provides Yii2 database storing for Queue.
@@ -19,7 +20,8 @@ use UrbanIndo\Yii2\Queue\Job;
  *     id BIGINT NOT NULL PRIMARY KEY AUTO_INCREMENT,
  *     status TINYINT NOT NULL DEFAULT 0,
  *     timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
- *     data BLOB
+ *     data BLOB,
+ *     fails INT NOT NULL DEFAULT 0
  * );
  *
  * The queue works under the asumption that the `id` fields is AUTO_INCREMENT and
@@ -125,7 +127,10 @@ class DbQueue extends \UrbanIndo\Yii2\Queue\Queue
                     ->select('*')
                     ->from($this->tableName)
                     ->where(['status' => self::STATUS_READY])
-                    ->orderBy(['id' => SORT_ASC])
+                    ->orderBy([
+                        'fails' => SORT_ASC,
+                        'id' => SORT_ASC
+                    ])
                     ->limit(1)
                     ->one($this->db);
     }
@@ -193,11 +198,27 @@ class DbQueue extends \UrbanIndo\Yii2\Queue\Queue
      */
     public function releaseJob(Job $job)
     {
-        return $this->db->createCommand()->update(
-            $this->tableName,
-            ['status' => self::STATUS_READY],
-            ['id' => $job->id]
-        )->execute() == 1;
+        $fails = (new \yii\db\Query())->select('fails')->from($this->tableName)->where(['id' => $job->id])->one()['fails'];
+        $fails++;
+        if($fails >= $this->failsLimit) {
+            return $this->db->createCommand()->update(
+                    $this->tableName,
+                    [
+                        'status' => self::STATUS_DELETED,
+                        'fails' => $fails
+                    ],
+                    ['id' => $job->id]
+                )->execute() == 1;
+        } else {
+            return $this->db->createCommand()->update(
+                    $this->tableName,
+                    [
+                        'status' => self::STATUS_READY,
+                        'fails' => $fails
+                    ],
+                    ['id' => $job->id]
+                )->execute() == 1;
+        }
     }
     
     /**
